@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amusedfunc-deployment
+  namespace: amused
+  labels:
+    app.kubernetes.io/name: amusedfunc
+    aadpodidbinding: podmi-amused-amusedfunc
+spec:
+  replicas: ${replicas}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: amusedfunc
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: amusedfunc
+        aadpodidbinding: podmi-amused-amusedfunc
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 3000
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - amusedfunc
+              topologyKey: "kubernetes.io/hostname"
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values:
+                        - nginx-ingress
+                topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: amusedfunc
+          image: enadocevia.azurecr.io/amused/amusedfunc
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - all
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      nodeSelector:
+        agentpool: npsystem

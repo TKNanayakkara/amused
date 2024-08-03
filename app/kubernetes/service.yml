@@ -1,0 +1,12 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: amusedfunc-service
+  namespace: amused
+spec:
+  selector:
+    app.kubernetes.io/name: amusedfunc
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

@@ -1,0 +1,97 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - app
+
+
+variables:
+  # Container registry service connection established during pipeline creation
+  imageRepo: amused/funcapp
+  tag: '$(Build.BuildId)'
+  dockerfilePath: '$(Build.SourcesDirectory)/app/Dockerfile'
+  buildContextPath: '$(Build.SourcesDirectory)/app/'
+  kubernetesFolderPath: '$(Pipeline.Workspace)/s/app/kubernetes'
+
+stages:
+- stage: Build
+  displayName: Build image
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      name: eviabuild
+    steps:
+    - task: NuGetAuthenticate@0
+    - task: Docker@2
+      displayName: Build image
+      inputs:
+        containerRegistry: amused
+        repository: $(imageRepo)
+        command: build
+        Dockerfile: $(dockerfilePath)
+        buildContext: $(buildContextPath)
+        tags: |
+          $(tag)
+    - task: Docker@2
+      displayName: Push image
+      inputs:
+        containerRegistry: amused
+        repository: $(imageRepo)
+        command: push
+        tags: |
+          $(tag)
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: $(kubernetesFolderPath)
+        artifact: manifests
+        publishLocation: 'pipeline'
+
+- stage: Deploy
+  displayName: Deploy to Dev
+  dependsOn: Build
+  variables:
+    acrUrl: 'amused.azurecr.io'
+    replicas: 1
+
+  jobs:
+    - deployment: Deploy
+      displayName: Deploy to AKS
+      environment: 'Development.amusedfunc'
+      pool:
+        name: 'ubuntu-latest'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - task: DownloadPipelineArtifact@2
+                inputs:
+                  buildType: 'current'
+                  artifactName: 'manifests'
+                  targetPath: '$(Pipeline.Workspace)/manifests'
+              - task: replacetokens@3
+                displayName: Replace Tokens
+                inputs:
+                  rootDirectory: '$(Pipeline.Workspace)/manifests/'
+                  targetFiles: 'deployment.yml'
+                  encoding: 'auto'
+                  writeBOM: true
+                  actionOnMissing: 'warn'
+                  keepToken: false
+                  tokenPrefix: '${'
+                  tokenSuffix: '}'
+                  useLegacyPattern: false
+                  enableTransforms: false
+                  enableTelemetry: true
+              - task: KubernetesManifest@0
+                inputs:
+                  action: 'deploy'
+                  namespace: 'amusedfunc'
+                  manifests: |
+                    $(Pipeline.Workspace)/manifests/deployment.yml
+                    $(Pipeline.Workspace)/manifests/service.yml
+                    $(Pipeline.Workspace)/manifests/ingress.yml
+                    $(Pipeline.Workspace)/manifests/pod-disruption-budget.yml
+                  containers: '$(acrUrl)/$(imageRepo):$(tag)'
