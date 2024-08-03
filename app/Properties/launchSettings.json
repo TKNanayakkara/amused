@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "amusedfunc": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7041"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
